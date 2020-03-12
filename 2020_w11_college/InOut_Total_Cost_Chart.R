@@ -1,5 +1,16 @@
 library(tidyverse)
 
+colors <- c("#F8F2D2", "#819975", "#DE6D43", "#424864")
+
+theme_set(theme_light(base_size = 10))
+theme_update(panel.background = element_rect(fill=colors[4]),
+             plot.background = element_rect(fill=colors[4]),
+             legend.background = element_rect(fill=colors[4]),
+             panel.grid = element_line(color = colors[1]),
+             text = element_text(color = colors[1]),
+             axis.text = element_text(color = colors[1]),
+             rect = element_rect(fill = colors[3], color = colors[3]))
+
 if (!exists("tuition_cost")) {
   tuition_cost <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-10/tuition_cost.csv')
 }
