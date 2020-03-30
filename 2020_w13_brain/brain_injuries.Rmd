@@ -1,0 +1,110 @@
+---
+title: "Brain Injuries"
+author: "zahlooh"
+date: "3/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+theme_set(theme_light())
+```
+
+# Get data
+```{r}
+tbi_age <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-24/tbi_age.csv') %>%
+  na.omit() %>%
+  filter(age_group != "Total") %>%
+  add_count(injury_mechanism, wt = number_est, name = "mecha_total") %>%
+  mutate(age_group = factor(ifelse(age_group %in% c("0-4", "5-14"), "0-17", age_group)),
+         type = factor(type, ordered = TRUE, levels = c("Emergency Department Visit", "Hospitalizations", "Deaths"), labels = c("Visit", "Hospitalization", "Death")),
+         injury_mechanism = fct_reorder(injury_mechanism, mecha_total, .desc = TRUE))
+  
+tbi_year <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-24/tbi_year.csv') %>%
+  na.omit() %>%
+  add_count(injury_mechanism, wt = number_est, name = "mecha_total") %>%
+  mutate(type = factor(type, ordered = TRUE, levels = c("Emergency Department Visit", "Hospitalizations", "Deaths"), labels = c("Visit", "Hospitalization", "Death")),
+         injury_mechanism = fct_reorder(injury_mechanism, mecha_total, .desc = TRUE),
+         year = factor(year, ordered = TRUE))
+
+tbi_military <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-24/tbi_military.csv')
+
+inj_mech_dict <- data.frame("injury_mechanism" = c("Motor Vehicle Crashes", 
+                                   "Unintentional Falls",
+                                   "Unintentionally struck by or against an object",
+                                   "Other unintentional injury, mechanism unspecified",
+                                   "Assault",
+                                   "Other or no mechanism specified",
+                                   "Intentional self-harm",
+                                   "Motor vehicle crashes",				
+                                   "Unintentional falls"),
+                   "mechanism" = c("Road Accident",
+                                  "Unintentional Fall",
+                                  "Unintentional Hit",
+                                  "Unintentional Other",
+                                  "Assault",
+                                  "Other",
+                                  "Suicide Attempt",
+                                  "Road Accident",
+                                  "Unintentional Fall"))
+```
+
+# Initial exploration - tbi_age
+```{r}
+str(tbi_age)
+summary(tbi_age)
+
+tbi_age$age_group %>% unique()
+tbi_age$injury_mechanism %>% unique()
+
+tbi_age %>%
+  merge(inj_mech_dict) %>% 
+  mutate(mechanism = fct_reorder(mechanism, desc(mecha_total)),
+         age_group = fct_lump_n(age_group, 5, w = number_est)) %>%
+  ggplot(aes(x = type, y = rate_est)) +
+    geom_col() +
+    coord_flip() +
+    scale_y_continuous(labels = scales::comma) +
+    facet_wrap(~mechanism, scales = "free_x", ncol = 2) +
+    labs(y = "Rate per 100,000 cases", x = "Result of an injury", title = "Rates of injury results by injury mechanisms", subtitle = "Ordered by total mechanism rate") +
+    theme(strip.text = element_text(hjust = 0))
+```
+
+```{r}
+tbi_age %>%
+  merge(inj_mech_dict) %>%
+  ggplot(aes(x = age_group)) +
+    coord_flip() +
+    geom_bar(stat = "count", aes(weight = number_est/1000), position = "stack") +
+    facet_wrap(~mechanism, scales = "free_x") +
+    theme(strip.text = element_text(hjust = 0))
+```
+
+
+# Initial exploration - tbi_year
+```{r}
+tbi_year %>%
+  anti_join(inj_mech_dict) %>%
+  select(injury_mechanism) %>%
+  unique()
+
+library(directlabels)
+  
+tbi_year %>%
+  merge(inj_mech_dict) %>%
+  filter(injury_mechanism != "Intentional self-harm") %>%
+  mutate(dead = ifelse(type == "Death", "Yes", "No"),
+         label = ifelse(as.numeric(year) == max(as.numeric(year)), as.character(mechanism), NA_character_)) %>%
+  count(year, mechanism, label, dead, wt = number_est) %>%
+  pivot_wider(names_from = dead, values_from = n) %>%
+  mutate(death_rate = Yes / (Yes + No)) %>%
+  ggplot(aes(x = year, y = death_rate, group = mechanism, col = mechanism)) +
+    geom_line(size = 1) +
+    scale_y_continuous(labels = scales::percent) +
+    scale_x_discrete(expand = expansion(add = c(0, 2.2))) +
+    labs(x = "Year", y = "Death rate", title = "Death rate of injury mechanisms over time", subtitle = "Suicide attempt is excluded as having too high death rate (75%+)") +
+    guides(color = FALSE) +
+    geom_dl(aes(label = mechanism), method = list(dl.trans(x = x + .1), "last.bumpup"))
+```
+
