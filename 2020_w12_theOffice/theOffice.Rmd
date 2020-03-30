@@ -1,0 +1,144 @@
+---
+title: "TidyTuesday 2020 week 12 - The Office"
+author: "zahlooh"
+date: "3/17/2020"
+output: html_document
+---
+
+# Set Up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gghalves)
+library(schrute)
+library(arcdiagram)
+
+theme_set(theme_light())
+```
+
+# Load Data
+```{r}
+office_ratings <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-17/office_ratings.csv') %>%
+  mutate(season = factor(season))
+```
+
+# Which season has the best rating?
+```{r}
+office_ratings %>%
+  ggplot(aes(x = season, y = imdb_rating, group = season)) +
+    geom_half_boxplot(outlier.size = 1, nudge = .05, aes(fill = season)) +
+    geom_half_violin(side = "r", nudge = .05, aes(fill = season)) +
+    scale_y_continuous(breaks = seq(1, 10, 1)) +
+    labs(x = "Season", y = "Distribution of IMDb ratings",
+         title = "Which season has the best IMDb rating?") +
+    expand_limits(y = 1) +
+    theme(legend.position = "none")
+```
+
+# Does it matter when episode is aired?
+```{r}
+office_ratings %>% filter(season == 1)
+
+office_ratings %>%
+  mutate(air_month = lubridate::month(air_date, label = TRUE, abbr = TRUE)) %>%
+  ggplot(aes(x = air_month, y = imdb_rating, group = air_month)) +
+      geom_half_boxplot(outlier.size = 1, nudge = .05, aes(fill = season)) +
+    geom_half_violin(side = "r", nudge = .05, aes(fill = season)) +
+    scale_y_continuous(breaks = seq(1, 10, 1)) +
+    labs(x = "Air Month", y = "Distribution of IMDb ratings",
+         title = "Which season has the best IMDb rating?") +
+    expand_limits(y = 1) +
+    theme(legend.position = "none")
+```
+
+# How rating changes as seasons progress?
+```{r}
+office_ratings %>%
+  ggplot(aes(x = episode, y = imdb_rating)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(1, max(office_ratings$episode), 1), minor_breaks = NULL) +
+    facet_wrap(~season, ncol = 1, strip.position = "right") +
+    labs(x = "Episode", y = "IMDb rating", title = "How IMDb rating fluctuates within each season?") +
+    theme(axis.text.y = element_blank())
+```
+
+# Who calls whose name?
+```{r}
+theoffice %>%
+  mutate(character = factor(character)) %>%
+  #count(character) %>%
+  mutate(character = fct_lump(character, 15)) %>% count(character) %>%
+  ggplot(aes(x = fct_reorder(character, n), y = n)) +
+    geom_col() +
+    coord_flip()
+
+characters <- fct_lump(theoffice$character, 12) %>% unique() %>% as.character()
+characters <- characters[characters != 'Other']
+
+whowhose <- theoffice %>%
+  select(character, text)
+
+matches <- data.frame()
+
+for (i in 1:nrow(whowhose)) {
+  matches <- rbind(matches, ifelse(str_detect(whowhose[i, c("text")], characters) == TRUE, 1, 0))
+}
+
+names(matches) = characters
+
+whowhose2 <- cbind(whowhose, matches)
+
+whowhose3 <- whowhose2 %>%
+  filter(character %in% characters) %>%
+  group_by(character) %>%
+  select(-text) %>%
+  summarise_all(funs(sum)) %>%
+  ungroup() %>%
+  pivot_longer(cols = Michael:Erin,
+               names_to = "char_said",
+               values_to = "num_said")
+
+shirt_chart <- whowhose3 %>%
+  ggplot(aes(character, char_said, fill = log2(num_said + 1))) +
+    geom_raster() +
+    coord_flip() +
+    scale_fill_gradient2(low="white", high="black") +
+    theme(plot.margin = unit(c(-1, -1, 1, 1) * 3, "points")) +
+    labs(x = "Character says...", y = "Character's name")
+
+hist_who_said <- whowhose3 %>%
+  ggplot(aes(x = character)) +
+    geom_bar(aes(weight = num_said)) +
+    coord_flip() +
+    theme(axis.title = element_blank(),
+          axis.text = element_blank(),
+          plot.margin = unit(c(-1, -1, -1, -1) * 3, "points"))
+
+hist_whose_said <- whowhose3 %>%
+  ggplot(aes(x = char_said)) +
+    geom_bar(aes(weight = num_said)) +
+    theme(axis.title = element_blank(),
+          axis.text = element_blank(),
+          plot.margin = unit(c(1, -1, -1, -1) * 3, "points"))
+
+combined <- ggarrange(hist_whose_said, NULL, shirt_chart, hist_who_said,
+          ncol = 2, nrow = 2, align = "hv",
+          widths = c(4,1), heights = c(1, 4),
+          legend = "none")
+
+annotate_figure(combined, top = "Who says whose name the most often?")
+```
+
+```{r}
+theoffice %>%
+  filter(character == "Jim") %>%
+  select(text) %>%
+  t() %>%
+  str_detect("Dwight") %>% sum()
+
+whowhose2 %>%
+  filter(character == "Jim") %>%
+  select(Dwight) %>%
+  sum()
+```
+
