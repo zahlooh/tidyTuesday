@@ -1,0 +1,88 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+theme_set(theme_light())
+```
+
+# Get the Data
+
+```{r}
+brewing_materials <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/brewing_materials.csv')
+beer_taxed <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/beer_taxed.csv')
+brewer_size <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/brewer_size.csv') %>%
+  filter(brewer_size != 'Total')
+beer_states <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-31/beer_states.csv') %>%
+  filter(state != 'total')
+
+```
+
+# Beer states
+
+```{r}
+beer_states %>% glimpse()
+summary(beer_states)
+table(beer_states$state)
+
+library(geofacet)
+
+tiff("USBeer.tiff", units="in", res=300, width=14, height=9) #stolen from @VictomOfMaths
+beer_states %>%
+  na.omit() %>%
+  group_by(state, year) %>%
+  summarize(barrels = sum(barrels) / 1000000) %>%
+  ungroup() %>%
+  ggplot(aes(x = year, y = barrels, group = state)) +
+    geom_line(col = "red") +
+    scale_x_continuous(breaks = c(2008, 2019)) +
+    scale_y_continuous(labels = scales::comma) +
+    facet_geo(~state, grid = "us_state_grid2") +
+    theme_classic() +
+    theme(strip.background=element_blank(), 
+          strip.text=element_text(face="bold", size=rel(0.7)),
+          axis.text=element_text(face="bold", size=rel(0.6))) +
+    labs(x = "Year", y = "Barrels, mln", title = "Beer production by state, 2008-2019")
+dev.off()
+```
+
+# Brewer size
+```{r}
+tiff("US_Beer_size_time.tiff", units="in", res=300, width=8, height=4.5)
+brewer_size %>%
+  na.omit() %>% # 2019 under 1 barrel has missing total_barrels
+  add_count(brewer_size, name = "bs_total_barrels", wt = total_barrels) %>%
+  mutate(size_left = gsub(",|Under", "", brewer_size) %>%
+                        str_split(" ") %>% 
+                        map_chr(., 1),
+         size_left = ifelse(size_left == "", 0, as.numeric(size_left)),
+         brewer_size = fct_lump_n(brewer_size, 7, bs_total_barrels),
+         brewer_size = fct_reorder(brewer_size, size_left)) %>%
+  ggplot(aes(x = year, y = total_barrels, fill = brewer_size)) +
+    geom_col(position = "fill") +
+    scale_x_continuous(breaks = seq(2009, 2019, 1), minor_breaks = NULL) +
+    scale_y_continuous(labels = scales::percent) +
+    scale_fill_brewer(palette = "Paired") +
+    labs(x = "Year", y = "% of total barrels produced", title = "Market share of large breweries is shrinking over time", fill = "Brewery size")
+```
+
+
+# Brewer size animation (not nice)
+```{r}
+library(gganimate)
+library(gifski)
+
+brewer_size_anim <- brewer_size %>%
+  na.omit() %>%
+  ggplot(aes(x = total_barrels, y = n_of_brewers)) +
+    geom_point() +
+    scale_x_log10(labels = scales::comma) +
+    scale_y_log10() +
+    transition_time(year) +
+    labs(title = 'Year: {frame_time}', x = 'Total barrels', y = 'Number of breweries')
+
+animate(brewer_size_anim, renderer = gifski_renderer())
+```
+
