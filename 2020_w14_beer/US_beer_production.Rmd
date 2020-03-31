@@ -29,14 +29,14 @@ table(beer_states$state)
 
 library(geofacet)
 
-tiff("USBeer.tiff", units="in", res=300, width=14, height=9) #stolen from @VictomOfMaths
+tiff("US_Beer_geofacet.tiff", units="in", res=300, width=8, height=4.5) #stolen from @VictomOfMaths
 beer_states %>%
   na.omit() %>%
   group_by(state, year) %>%
   summarize(barrels = sum(barrels) / 1000000) %>%
   ungroup() %>%
   ggplot(aes(x = year, y = barrels, group = state)) +
-    geom_line(col = "red") +
+    geom_line(col = "red", size = 1) +
     scale_x_continuous(breaks = c(2008, 2019)) +
     scale_y_continuous(labels = scales::comma) +
     facet_geo(~state, grid = "us_state_grid2") +
@@ -45,7 +45,6 @@ beer_states %>%
           strip.text=element_text(face="bold", size=rel(0.7)),
           axis.text=element_text(face="bold", size=rel(0.6))) +
     labs(x = "Year", y = "Barrels, mln", title = "Beer production by state, 2008-2019")
-dev.off()
 ```
 
 # Brewer size
