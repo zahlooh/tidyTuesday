@@ -1,0 +1,82 @@
+---
+title: "Tour de France"
+author: "zahlooh"
+date: "4/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpattern)
+library(countrycode)
+library(EBImage)
+theme_set(theme_light())
+```
+
+# Get Data
+```{r}
+tuesdata <- tidytuesdayR::tt_load(2020, week = 15)
+
+# detailed results by stage
+tdf.dtl <- tuesdata$stage_data %>%
+    mutate(stage_num = parse_number(sub("\\-", " ", stage_results_id)))
+
+tdf.win <- tuesdata$tdf_winners # final results
+tdf.stg <- tuesdata$tdf_stages # stage details
+
+```
+
+# Who had the highest range of places over stages
+```{r}
+tiff("TDF_num_of_racers_drop.tiff", units="in", res=300, width=8, height=4.5)
+tdf.dtl %>%
+  count(year, stage_num, name = "racers_n") %>%
+  group_by(year) %>%
+  mutate(racers_rng = max(racers_n) - min(racers_n),
+         label = paste0(year, ": ", racers_rng)) %>%
+  ungroup() %>%
+  filter(year >= 2000)
+  ggplot(aes(x = stage_num, y = racers_n, col = factor(year))) +
+    geom_line(size = 1.5) +
+    gghighlight::gghighlight(max(racers_rng), max_highlight = 5L, label_key = label) +
+    labs(x = "Stage", y = "Number of racers", title = "Which years seen the highest drop in number of racers over stages?", subtitle = "Races not earlier than 2000")
+```
+
+
+# Trying to use ggpattern - didn't work
+```{r}
+# flags <- paste0(getwd(), "/", list.files(path = "flags", pattern = "\\.png$", full.names = TRUE)) %>% unlist()
+# 
+# tdf.win.flags <- tdf.win %>% 
+#   add_count(winner_name, name = "person_win_n") %>%
+#   add_count(birth_country, name = "country_win_n") %>%
+#   mutate(winner_name = fct_reorder(winner_name, person_win_n),
+#          nationality_cd = countrycode(nationality, origin = 'country.name', destination = 'iso2c') %>% str_to_lower(),
+#          flag_path = paste0(getwd(), "/flags/", nationality_cd, ".png"),
+#          nationality = fct_lump_n(nationality, 10, w = country_win_n))
+# 
+# flags <- tdf.win.flags %>%
+#   filter(person_win_n > 2) %>%
+#   arrange(desc(person_win_n)) %>%
+#   select(winner_name, flag_path) %>%
+#   unique() %>%
+#   select(flag_path)
+# 
+# tdf.win.flags %>%
+#   filter(person_win_n > 2) %>%
+#   ggplot(aes(x = winner_name, y = person_win_n)) +
+#     geom_col_pattern(aes(pattern_filename = flag_path),
+#                       pattern         = 'image',
+#                       pattern_type    = 'none',
+#                       fill            = 'grey80',
+#                       colour          = 'black',
+#                       pattern_scale   = -2,
+#                       pattern_filter  = 'point',
+#                       pattern_gravity = 'east') +
+#     scale_pattern_filename_discrete(choices = flags) +
+#     coord_flip() +
+#     scale_pattern_discrete(guide = guide_legend(nrow = 1)) +
+#     theme(legend.position = "none")
+```
+
