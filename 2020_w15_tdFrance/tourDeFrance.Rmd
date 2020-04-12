@@ -7,10 +7,14 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 library(tidyverse)
+library(lubridate)
 library(ggpattern)
+library(ggimage)
 library(countrycode)
 library(EBImage)
+library(gganimate)
 theme_set(theme_light())
 ```
 
@@ -18,12 +22,41 @@ theme_set(theme_light())
 ```{r}
 tuesdata <- tidytuesdayR::tt_load(2020, week = 15)
 
+tdf.stg.typ <- data.frame(matrix(c("flat cobblestone stage", "flat",
+                            "flat stage", "flat",
+                            "half stage", "other",
+                            "high mountain stage", "mountain", 
+                            "hilly stage", "hilly",
+                            "individual time trial", "time trial",
+                            "intermediate stage", "other",
+                            "medium mountain stage", "mountain",
+                            "mountain stage", "mountain",
+                            "mountain time trial", "time trial",
+                            "plain stage", "flat",
+                            "plain stage with cobblestones", "flat",
+                            "stage with mountain", "mountain",
+                            "stage with mountain(s)", "mountain",
+                            "team time trial", "time trial",
+                            "transition stage", "other"), ncol = 2, byrow = TRUE))
+names(tdf.stg.typ) <- c("Type", "type2")
+
 # detailed results by stage
 tdf.dtl <- tuesdata$stage_data %>%
-    mutate(stage_num = parse_number(sub("\\-", " ", stage_results_id)))
+  extract(stage_results_id, into = "stage_id", "stage-(.*)", remove = TRUE) %>%
+  mutate(stage_id = as.numeric(stage_id),
+         rank = as.numeric(rank)) %>%
+  separate(rider, into = c("last_name", "first_name"), sep = " ") %>%
+  relocate(stage_id, .after = year)
 
-tdf.win <- tuesdata$tdf_winners # final results
-tdf.stg <- tuesdata$tdf_stages # stage details
+tdf.win <- tuesdata$tdf_winners %>% # final results
+  mutate(year = year(start_date)) %>%
+  separate(winner_name, into = c("first_name", "last_name", sep = " "))
+
+tdf.stg <- tuesdata$tdf_stages %>% # stage details
+  mutate(year = year(Date),
+         stage_id = as.numeric(Stage),
+         Type = str_to_lower(Type)) %>%
+  left_join(tdf.stg.typ)
 
 ```
 
@@ -31,16 +64,71 @@ tdf.stg <- tuesdata$tdf_stages # stage details
 ```{r}
 tiff("TDF_num_of_racers_drop.tiff", units="in", res=300, width=8, height=4.5)
 tdf.dtl %>%
-  count(year, stage_num, name = "racers_n") %>%
+  count(year, stage_id, name = "racers_n") %>%
   group_by(year) %>%
   mutate(racers_rng = max(racers_n) - min(racers_n),
          label = paste0(year, ": ", racers_rng)) %>%
   ungroup() %>%
-  filter(year >= 2000)
-  ggplot(aes(x = stage_num, y = racers_n, col = factor(year))) +
+  filter(year >= 2000) %>%
+  ggplot(aes(x = stage_id, y = racers_n, col = factor(year))) +
     geom_line(size = 1.5) +
     gghighlight::gghighlight(max(racers_rng), max_highlight = 5L, label_key = label) +
     labs(x = "Stage", y = "Number of racers", title = "Which years seen the highest drop in number of racers over stages?", subtitle = "Races not earlier than 2000")
+```
+
+# Races with the most race lead changes
+```{r}
+library(png)
+mypng <- readPNG('120px-Olympic_pictogram_Cycling.png')
+
+tdf.dtl.mean_rank <- tdf.dtl %>%
+  inner_join(tdf.stg %>% select(year, stage_id, type2), by = c("year", "stage_id")) %>%
+  inner_join(tdf.win %>% select(year, first_name, last_name), by = c("year", "first_name", "last_name")) %>%
+  filter(year >= 2000) %>%
+  group_by(type2) %>% summarize(mean_rank = mean(rank)) %>% ungroup()
+
+tdf.dtl %>%
+  inner_join(tdf.stg %>% select(year, stage_id, type2), by = c("year", "stage_id")) %>%
+  inner_join(tdf.win %>% select(year, first_name, last_name), by = c("year", "first_name", "last_name")) %>%
+  inner_join(tdf.dtl.mean_rank, by = "type2") %>%
+  filter(year >= 2000) %>%
+  add_count(type2, name = "stg_type_num") %>% mutate(type = fct_reorder(type2, stg_type_num)) %>%
+  mutate(winner = fct_reorder(paste0(first_name, " ", last_name, ", ", year), year)) %>%
+  ggplot(aes(x = type, y = rank, col = type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_jitter(height = .02, alpha = .5) +
+    #geom_image(aes(image = rep(mypng, times = 371), x = type, y = mean_rank + 100), inherit.aes = FALSE) +
+    geom_text(aes(label = "\uD83D\uDEB2", x = type, y = mean_rank+100, angle = 0, vjust = 0), size = 20) +
+    scale_y_reverse() +
+    coord_flip() +
+    labs(title = "Tour de France winners are experts in Mountain and Time Trial stages",
+         subtitle = "stages sorted by frequency",
+         y = "Winner's stage rank",
+         x = "Stage type") +
+    theme(legend.position = "none")
+ggsave("TDF_winners_stage_type_rank.tiff", units="in", dpi=300, width=8, height=4.5)
+
+```
+
+# Animate that
+```{r}
+# tdf.dtl %>%
+#   inner_join(tdf.stg %>% select(year, stage_id, type2), by = c("year", "stage_id")) %>%
+#   inner_join(tdf.win %>% select(year, first_name, last_name), by = c("year", "first_name", "last_name")) %>%
+#   add_count(type2, name = "stg_type_num") %>% mutate(type = fct_reorder(type2, stg_type_num)) %>%
+#   group_by(year, first_name, last_name, type2) %>% summarize(mean_stg_rank = mean(rank)) %>% ungroup() %>%
+#   ggplot(aes(x = type2, y = mean_stg_rank)) +
+#     geom_col() +
+#     coord_flip() +
+#     transition_time(year) +
+#     labs(title = "Year: { frame_time }",
+#          x = "Winner's stage rank",
+#          y = "Stage type")
+```
+
+
+```{r}
+tdf.stg
 ```
 
 
