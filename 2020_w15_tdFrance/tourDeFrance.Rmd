@@ -98,8 +98,8 @@ tdf.dtl %>%
     geom_boxplot(outlier.alpha = 0) +
     geom_jitter(height = .02, alpha = .5) +
     #geom_image(aes(image = rep(mypng, times = 371), x = type, y = mean_rank + 100), inherit.aes = FALSE) +
-    geom_text(aes(label = "\uD83D\uDEB2", x = type, y = mean_rank+100, angle = 0, vjust = 0), size = 20) +
-    scale_y_reverse() +
+    geom_text(aes(label = "\uD83D\uDEB2", x = type, y = mean_rank + 75, angle = 0, vjust = 0), size = 20) +
+    #scale_y_reverse() +
     coord_flip() +
     labs(title = "Tour de France winners are experts in Mountain and Time Trial stages",
          subtitle = "stages sorted by frequency",
