@@ -1,0 +1,100 @@
+---
+title: "rap"
+author: "zahlooh"
+date: "4/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggrepel)
+library(ggtext)
+library(tidytext)
+
+theme_set(theme_classic())
+theme_update(legend.position = "none",
+      panel.background = element_rect(fill = "black"),
+      plot.background = element_rect(fill = "black"),
+      plot.title = element_markdown(),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_blank(),
+      text = element_text(colour = "white"),
+      axis.text = element_text(colour = "white"),
+      axis.line = element_line(color = "white"))
+```
+
+
+# Get Data
+```{r}
+tuesdata <- tidytuesdayR::tt_load(2020, week = 16)
+
+rap.polls <- tuesdata$polls
+rap.ranks <- tuesdata$rankings %>%
+  rename(num_total = n,
+         num_1 = n1,
+         num_2 = n2,
+         num_3 = n3,
+         num_4 = n4,
+         num_5 = n5) %>%
+  mutate(percentile = ntile(points, 100))
+```
+
+# Polls
+```{r}
+
+```
+
+# Ranks
+```{r}
+rap.ranks %>%
+  ggplot(aes(x = year, y = points, col = percentile >= 97)) +
+    geom_point(alpha = .5) +
+    geom_text_repel(aes(label = artist), filter(rap.ranks, percentile >= 97), direction = "x", nudge_y = 5, col = "#FFD700") +
+    labs(title = "**Rap songs by BBC score over the years (<span style='color:#FFD700;'>top 3%</span>)**", 
+         x = "Year", y = "Total points, BBC",
+         caption = "data: BBC Music") +
+    scale_color_manual(values = c("white", "#FFD700"))
+ggsave("Points_by_year.png", width = 8, height = 4.5, dpi = 300)
+```
+
+```{r}
+rap.ranks.unnested <- rap.ranks %>%
+  unnest_tokens(artist_lbl, artist, token = "regex", pattern = "ft.|&", to_lower = FALSE) %>%
+  mutate(artist_lbl = str_trim(artist_lbl),
+         artist = str_to_lower(artist_lbl)) %>%
+  relocate(artist, .before = title)
+
+rap.artist <- rap.ranks.unnested %>%
+  group_by(artist) %>%
+  summarize(career_start_yr = min(year),
+            career_length = max(year) - min(year),
+            career_end_yr = max(year),
+            career_mean_points = mean(points)) %>%
+  ungroup() %>%
+  mutate(career_percentile_points = ntile(career_mean_points, 100)) %>%
+  arrange(desc(career_percentile_points))
+
+rap.ranks.unnested %>%
+  left_join(rap.artist, by = "artist") %>%
+  group_by(year, artist, artist_lbl) %>%
+  summarize(career_yr = year - career_start_yr,
+            mean_points = mean(points)) %>%
+  ungroup() %>%
+  inner_join(rap.artist %>% filter(career_length >= 5), by = "artist") %>%
+  ggplot(aes(x = career_yr, y = mean_points, col = artist_lbl)) +
+    geom_line(size = 1.2, alpha = .8) +
+    gghighlight::gghighlight(max(career_percentile_points), max_highlight = 6L, label_key = artist_lbl, unhighlighted_colour = "grey25", 
+                             label_params = list(fill = "black", label.size = NA, force = 50, 
+                                                 hjust = 0, vjust = 0, nudge_x = 5, direction = "y", segment.size = NA,
+                                                 fontface = "bold")) +
+    scale_y_log10() +
+    scale_x_sqrt() +
+    scale_color_brewer(type = "qual", palette = "Accent") +
+    labs(x = "Year since first BBC ranking", y = "Mean points, BBC",
+         title = "**Career trajectories of rappers based on BBC points**",
+         subtitle = "rappers with highest average points staying longer than 5 years in BBC charts are highlighted",
+         caption = "data: BBC Music")
+ggsave("Points_over_career.png", width = 8, height = 4.5, dpi = 300)  
+```
+
