@@ -29,7 +29,9 @@ theme_update(legend.position = "none",
 ```{r}
 tuesdata <- tidytuesdayR::tt_load(2020, week = 16)
 
-rap.polls <- tuesdata$polls
+rap.polls <- tuesdata$polls %>%
+  mutate(decade = cut(year, c(1978, 1990, 2000, 2010, 2020), dig.lab = 10))
+
 rap.ranks <- tuesdata$rankings %>%
   rename(num_total = n,
          num_1 = n1,
@@ -38,11 +40,6 @@ rap.ranks <- tuesdata$rankings %>%
          num_4 = n4,
          num_5 = n5) %>%
   mutate(percentile = ntile(points, 100))
-```
-
-# Polls
-```{r}
-
 ```
 
 # Ranks
@@ -95,6 +92,33 @@ rap.ranks.unnested %>%
          title = "**Career trajectories of rappers based on BBC points**",
          subtitle = "rappers with highest average points staying longer than 5 years in BBC charts are highlighted",
          caption = "data: BBC Music")
-ggsave("Points_over_career.png", width = 8, height = 4.5, dpi = 300)  
+ggsave("Points_over_career.png", width = 8, height = 4.5, dpi = 300)
 ```
 
+# Polls
+```{r}
+rap.polls %>%
+  unnest_tokens(word, title) %>%
+  relocate(word, .after = artist) %>%
+  #anti_join(stop_words, by = "word") %>%
+  count(decade, word) %>%
+  bind_tf_idf(word, decade, n) %>%
+  group_by(decade) %>% top_n(10, tf_idf) %>% ungroup() %>%
+  mutate(word = factor(word),
+         decade = factor(decade),
+         word = reorder_within(word, tf_idf, decade)) %>%
+  ggplot(aes(x = word, y = tf_idf, fill = decade)) +
+    geom_col() +
+    scale_x_reordered() +
+    coord_flip() +
+    facet_wrap(~decade, ncol = 2, scales = "free") +
+    labs(title = "Important words for each time period based on rap song titles",
+         subtitle = "based on TF-IDF",
+         x = "TF-IDF statistic",
+         caption = "data: BBC Music") +
+    theme(axis.title.y = element_blank(),
+          strip.background = element_blank(),
+          strip.text = element_text(hjust = 0, colour = "white")) +
+    scale_color_brewer(type = "qual", palette = "Accent")
+ggsave("TF_IDF_by_decades.png", width = 8, height = 4.5, dpi = 300)
+```
