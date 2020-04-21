@@ -1,0 +1,43 @@
+---
+title: "GDPR"
+author: "zahlooh"
+date: "4/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+
+theme_set(theme_bw())
+```
+
+# Get Data
+```{r}
+gdpr_violations <- readr::read_tsv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-04-21/gdpr_violations.tsv') %>%
+  mutate(date = parse_date(date, forma = "%m/%d/%Y"),
+         month = lubridate::round_date(date, unit = "month"))
+
+gdpr_text <- readr::read_tsv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-04-21/gdpr_text.tsv')
+```
+
+# Analyze data
+```{r}
+by_country <- gdpr_violations %>% 
+  #filter(month > as.Date("2000-01-01")) %>%
+  group_by(name) %>% summarize(revenue = sum(price)) %>% ungroup()
+
+# get maps
+eu <- ne_countries(returnclass = "sf") %>% 
+  st_crop(xmin = -20, xmax = 45, 
+          ymin = 30, ymax = 73) %>%
+  left_join(by_country, by = c("sovereignt" = "name"))
+
+eu %>% ggplot() + 
+  geom_sf(aes(fill = revenue)) +
+  theme_void()
+```
+
