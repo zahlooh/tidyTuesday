@@ -12,7 +12,7 @@ library(tidyverse)
 library(sf)
 library(rnaturalearth)
 
-theme_set(theme_bw())
+theme_set(theme_light())
 ```
 
 # Get Data
@@ -28,16 +28,40 @@ gdpr_text <- readr::read_tsv('https://raw.githubusercontent.com/rfordatascience/
 ```{r}
 by_country <- gdpr_violations %>% 
   #filter(month > as.Date("2000-01-01")) %>%
-  group_by(name) %>% summarize(revenue = sum(price)) %>% ungroup()
+  group_by(name) %>% summarize(revenue = sum(price)) %>% ungroup() %>% arrange(desc(revenue))
 
-# get maps
-eu <- ne_countries(returnclass = "sf") %>% 
-  st_crop(xmin = -20, xmax = 45, 
-          ymin = 30, ymax = 73) %>%
-  left_join(by_country, by = c("sovereignt" = "name"))
+gdpr.date.range <- gdpr_violations %>% filter(date > as.Date("2000-01-01")) %>% group_by %>% summarize(min.dt = min(date), max.dt = max(date))
 
-eu %>% ggplot() + 
-  geom_sf(aes(fill = revenue)) +
-  theme_void()
+set.seed(123456)
+ne_countries(returnclass = "sf") %>% 
+  st_crop(xmin = -30, xmax = 45, 
+          ymin = 35, ymax = 65) %>%
+  left_join(by_country, by = c("sovereignt" = "name")) %>%
+  mutate(country.fs = ifelse(is.na(revenue), 0, revenue),
+         rev.label = ifelse(is.na(revenue), NA, paste0("€", round(revenue / 1000000, 0), "M")),
+         centroid = st_centroid(geometry),
+         c.x = map_dbl(centroid, 1),
+         c.y = map_dbl(centroid, 2)) %>%  
+  mutate(country = ifelse(revenue == 0, NA, sovereignt),
+         height = ifelse(revenue > 0, revenue / 10000000, NA)) %>%
+  ggplot() + 
+    geom_sf(aes(fill = sovereignt), alpha = .5, col = "grey75") +
+    geom_rect(aes(xmax = c.x, ymax = c.y + height,
+                  xmin = c.x - 2, ymin = c.y), fill = "red") +
+    geom_text(aes(label = country, size = country.fs, x = c.x, y = c.y), hjust = 0, vjust = 0) +
+    geom_text(aes(label = rev.label, 
+                  size = country.fs, x = c.x, y = c.y), hjust = 0, vjust = 1) +
+    scale_fill_manual(values = rep(RColorBrewer::brewer.pal(12,"Spectral"), 5) %>% sample()) +
+    coord_sf() +
+    theme_minimal() +
+    labs(title = "France, Germany, Italy, and Austria are the main beneficiaries of GDPR",
+         subtitle = paste0("total revenue between ", gdpr.date.range$min.dt, " and ", gdpr.date.range$max.dt),
+         caption = "data: https://www.privacyaffairs.com/gdpr-fines/") +
+    theme(legend.position = "none",
+          axis.text = element_blank(),
+          axis.line = element_blank(),
+          axis.title = element_blank())
+
+ggsave("gdpr.png", width = 8, height = 4.5, dpi = 300)
 ```
 
