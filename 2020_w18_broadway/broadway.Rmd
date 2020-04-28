@@ -1,0 +1,111 @@
+---
+title: "Broadway"
+author: "zahlooh"
+date: "4/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+
+theme_set(theme_light())
+```
+
+# Get data
+```{r}
+synopses <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-04-28/synopses.csv')
+
+cpi <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-04-28/cpi.csv')
+
+grosses <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-04-28/grosses.csv') %>%
+  mutate(month = floor_date(week_ending, "month"),
+         season = floor_date(week_ending, "season") %>% month() %>% factor(levels = c(3, 6, 9, 12), labels = c("Spring", "Summer", "Fall", "Winter")),
+         year = floor_date(week_ending, "year"),
+         size = cut(seats_in_theatre, c(-Inf, seq(800, 2000, by = 300))),
+         size = factor(size, labels = c("<800", "800-1100", "1100-1400", "1400-1700", "1700+"), ordered = TRUE)) %>%
+  left_join(cpi, by = c("month" = "year_month")) %>%
+  mutate_at(vars(matches("*gross*"), matches("*price*")), ~.x / cpi * 100)
+
+pre_1985_starts <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-04-28/pre-1985-starts.csv')
+
+```
+
+# Grosses
+
+```{r}
+# What is the trend for weekly box office?
+grosses %>%
+  group_by(month, season) %>% summarize(gross = mean(weekly_gross_overall) * 52) %>% ungroup() %>%
+  ggplot(aes(x = month, y = gross, col = season)) +
+    geom_point(alpha = .75, size = 3) +
+    geom_smooth(se = FALSE) +
+    scale_color_manual(values = c("#38D827", "#FB2D38", "#FF892E", "#1FADA2")) +
+    scale_x_date(date_breaks = "5 years", date_minor_breaks = "1 year", date_labels = "%Y") +
+    scale_y_continuous(labels = scales::dollar_format(scale = 0.000001, suffix = "M")) +
+    labs(x = "Date", y = "Total gross annualized revenue", title = "Broadway industry steadily grows", caption = "revenue expressed in 1984 USD, data: playbill.com/grosses", color = "Season") +
+    annotate("text", x = date("2013-01-01"), y = 170 * 10^6, label = "Mortgage crisis", hjust = 0) +
+    annotate("curve", x = date("2012-11-01"), y = 170 * 10^6, 
+                        xend = date("2008-06-01"), yend = 212896870,
+             arrow = arrow(length = unit(4, "mm")),
+             col = "grey50")
+```
+
+```{r}
+# What is the busiest month?
+grosses %>%
+  group_by(month, season) %>% summarize(gross = mean(weekly_gross_overall * 52)) %>% ungroup() %>%
+  mutate(month_nm = month(month, label = TRUE) %>% factor()) %>%
+  ggplot(aes(x = month_nm, y = gross, col = month_nm, fill = month_nm)) +
+    geom_boxplot(alpha = .5) + 
+    scale_fill_manual(values = c(rep("#1FADA2", 2), rep("#38D827", 3), rep("#FB2D38", 3), rep("#FF892E", 3), rep("#1FADA2", 1))) +
+    scale_colour_manual(values = c(rep("#1FADA2", 2), rep("#38D827", 3), rep("#FB2D38", 3), rep("#FF892E", 3), rep("#1FADA2", 1))) +
+    scale_y_continuous(labels = scales::dollar_format(scale = 0.000001, suffix = "M")) +
+    labs(x = "Month of year", y = "Total gross annualized revenue", title = "Winter and Spring bring the highest revenue", caption = "revenue expressed in 1984 USD, data: playbill.com/grosses") +
+    theme(legend.position = "none")
+
+```
+
+```{r}
+# What happens with number of seats over time?
+grosses %>% 
+  filter(seats_in_theatre > 0) %>% #ggplot(aes(x = seats_in_theatre)) + geom_histogram()
+  group_by(year, size) %>% summarize(weekly_gross = mean(weekly_gross)) %>% ungroup() %>%
+  ggplot(aes(x = year, y = weekly_gross, fill = size)) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    scale_x_date(date_breaks = "5 years", date_minor_breaks = "1 year", date_labels = "%Y") +
+    geom_col(position = "fill") +
+    labs(x = "Date", title = "Smaller shows get bigger chunk of total revenue over time", fill = "Seats available", caption = "data: playbill.com/grosses") +
+    theme(axis.title.y = element_blank())
+```
+
+```{r}
+# What happens with average price over time?
+grosses %>%
+  ggplot(aes(x = year, y = avg_ticket_price, group = year)) +
+    geom_boxplot() +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    scale_x_date(date_breaks = "5 years", date_minor_breaks = "1 year", date_labels = "%Y") +
+    labs(x = "Date", y = "Average ticket price", title = "Broadway shows are becoming more expensive with wider price range", caption = "revenue expressed in 1984 USD, data: playbill.com/grosses")
+```
+
+```{r}
+# What happens with capacity utilization over time?
+grosses %>%
+  ggplot(aes(x = year, y = pct_capacity, group = year)) +
+    geom_boxplot() +
+    scale_y_continuous(labels = scales::percent_format(scale = 100)) +
+    scale_x_date(date_breaks = "5 years", date_minor_breaks = "1 year", date_labels = "%Y") +
+    labs(x = "Date", y = "Seats capacity utilization", title = "Industry gets better in utilizing capacity", caption = "data: playbill.com/grosses")
+```
+
+
+```{r}
+grosses %>%
+  filter(avg_ticket_price > 0, seats_sold > 0) %>%
+  ggplot(aes(x = avg_ticket_price, y = seats_sold, col = size)) +
+    geom_point(alpha = .1)
+```
+
