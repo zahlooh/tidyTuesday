@@ -98,7 +98,7 @@ grosses %>%
     geom_boxplot() +
     scale_y_continuous(labels = scales::percent_format(scale = 100)) +
     scale_x_date(date_breaks = "5 years", date_minor_breaks = "1 year", date_labels = "%Y") +
-    labs(x = "Date", y = "Seats capacity utilization", title = "Industry gets better in utilizing capacity", caption = "data: playbill.com/grosses")
+    labs(x = "Date", y = "Capacity utilization", title = "Industry gets better in utilizing capacity", caption = "data: playbill.com/grosses")
 ```
 
 
