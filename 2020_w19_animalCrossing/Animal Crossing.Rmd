@@ -1,0 +1,122 @@
+---
+title: "Animal Crossing"
+author: "Danil Dzhalchinov"
+date: "5/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidytext)
+```
+
+# Get Data
+```{r}
+critic <- readr::read_tsv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-05-05/critic.tsv')
+user_reviews <- readr::read_tsv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-05-05/user_reviews.tsv')
+items <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-05-05/items.csv')
+villagers <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-05-05/villagers.csv')
+```
+
+# Villagers
+```{r}
+villagers %>%
+  count(gender, species) %>%
+  pivot_wider(names_from = gender, values_from = n) %>% 
+  mutate(male = replace_na(male, 0), female = replace_na(female, 0),
+         ratio = log((female + 1) / (male + 1))) %>% 
+  ggplot(aes(x = male, y = female, col = ratio)) +
+    geom_point() +
+    ggrepel::geom_text_repel(aes(label = species)) +
+    geom_abline(slope = 1, col = "white") +
+    scale_color_gradient2(low = "#00dbde", high = "#fc00ff", midpoint = -0.15) +
+    coord_fixed(xlim = c(0, 15), ylim = c(0, 15)) +
+    labs(x = "Male", y = "Female", title = "What species are associated with which gender?") +
+    theme(legend.position = "none",
+          panel.background = element_rect(fill = "#2C516E"),
+          plot.background = element_rect(fill = "#2C516E"),
+          axis.ticks = element_blank(),
+          axis.title.x = element_text(color = "#00dbde"),
+          axis.text.x = element_text(color = "#00dbde"),
+          axis.line.x = element_line(color = "#00dbde"),
+          axis.title.y = element_text(color = "#fc00ff"),
+          axis.text.y =  element_text(color = "#fc00ff"),
+          axis.line.y = element_line(color = "#fc00ff"),
+          plot.title = element_text(color = "white", size = 12),
+          panel.border = element_blank(),
+          panel.grid = element_blank())
+ggsave("species_gender.png", dpi = 300, width = 5, height = 5, units = "in")
+```
+
+# Items
+```{r}
+items %>%
+  filter(sell_currency == "bells", buy_currency == "bells") %>%
+  transmute(spread = buy_value - sell_value,
+            category, buy_value, sell_value) %>%
+  unique() %>%
+  ggplot(aes(y = category, x = buy_value)) +
+    geom_boxplot() +
+    scale_x_log10()
+```
+
+# User reviews
+```{r}
+user_reviews %>%
+  ggplot(aes(x = date)) +
+    geom_bar()
+
+afinn <- get_sentiments("afinn")
+bing <- get_sentiments("bing")
+
+user_reviews %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  inner_join(bing) %>%
+  ggplot(aes(x = date, fill = sentiment)) +
+    geom_bar(position = "dodge")
+
+```
+
+# Critic
+```{r}
+critic %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>% 
+  inner_join(bing) %>%
+  ggplot(aes(x = date, fill = sentiment)) +
+    geom_bar(position = "dodge")
+
+```
+
+# Users vs Critics
+```{r}
+user_reviews %>%
+  transmute(type = "user",
+            grade = 100 * grade / (max(grade) - min(grade)),
+            name = user_name, 
+            text, date) %>%
+  rbind(critic %>%
+          transmute(type = "critic",
+                    grade,
+                    name = publication,
+                    text, date)) %>%
+  unnest_tokens(word, text) %>%
+  mutate(word = str_remove_all(word, "[^a-zA-Z]") %>%
+           str_replace_all("aa", "a")) %>%
+  anti_join(stop_words) %>%
+  filter(nchar(word) > 0) %>% 
+  count(type, word) %>%
+  bind_tf_idf(word, type, n) %>%
+  group_by(type) %>%
+  slice(1:10) %>%
+  ungroup() %>%
+  mutate(word = reorder_within(word, tf_idf, type)) %>% 
+  ggplot(aes(x = tf_idf, y = word)) +
+    geom_col() +
+    scale_y_reordered() +
+    facet_wrap(~type, scales = "free")
+```
+
